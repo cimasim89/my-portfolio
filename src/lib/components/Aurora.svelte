@@ -1,21 +1,15 @@
-/*
-	jsrepo 1.41.3
-	Installed from https://reactbits.dev/ts/tailwind/
-	3-4-2025
-*/
-'use client'
+<script lang="ts">
+  import { onMount, untrack } from 'svelte'
+  import { Color, Mesh, Program, Renderer, Triangle } from 'ogl'
 
-import { Color, Mesh, Program, Renderer, Triangle } from 'ogl'
-import { useEffect, useRef } from 'react'
-
-const VERT = `#version 300 es
+  const VERT = `#version 300 es
 in vec2 position;
 void main() {
   gl_Position = vec4(position, 0.0, 1.0);
 }
 `
 
-const FRAG = `#version 300 es
+  const FRAG = `#version 300 es
 precision highp float;
 
 uniform float uTime;
@@ -52,7 +46,7 @@ float snoise(vec2 v){
           dot(x0, x0),
           dot(x12.xy, x12.xy),
           dot(x12.zw, x12.zw)
-      ), 
+      ),
       0.0
   );
   m = m * m;
@@ -75,70 +69,86 @@ struct ColorStop {
   float position;
 };
 
-#define COLOR_RAMP(colors, factor, finalColor) {              \
-  int index = 0;                                            \
-  for (int i = 0; i < 2; i++) {                               \
-     ColorStop currentColor = colors[i];                    \
-     bool isInBetween = currentColor.position <= factor;    \
-     index = int(mix(float(index), float(i), float(isInBetween))); \
-  }                                                         \
-  ColorStop currentColor = colors[index];                   \
-  ColorStop nextColor = colors[index + 1];                  \
-  float range = nextColor.position - currentColor.position; \
-  float lerpFactor = (factor - currentColor.position) / range; \
-  finalColor = mix(currentColor.color, nextColor.color, lerpFactor); \
+#define COLOR_RAMP(colors, factor, finalColor) {              \\
+  int index = 0;                                            \\
+  for (int i = 0; i < 2; i++) {                               \\
+     ColorStop currentColor = colors[i];                    \\
+     bool isInBetween = currentColor.position <= factor;    \\
+     index = int(mix(float(index), float(i), float(isInBetween))); \\
+  }                                                         \\
+  ColorStop currentColor = colors[index];                   \\
+  ColorStop nextColor = colors[index + 1];                  \\
+  float range = nextColor.position - currentColor.position; \\
+  float lerpFactor = (factor - currentColor.position) / range; \\
+  finalColor = mix(currentColor.color, nextColor.color, lerpFactor); \\
 }
 
 void main() {
   vec2 uv = gl_FragCoord.xy / uResolution;
-  
+
   ColorStop colors[3];
   colors[0] = ColorStop(uColorStops[0], 0.0);
   colors[1] = ColorStop(uColorStops[1], 0.5);
   colors[2] = ColorStop(uColorStops[2], 1.0);
-  
+
   vec3 rampColor;
   COLOR_RAMP(colors, uv.x, rampColor);
-  
+
   float height = snoise(vec2(uv.x * 2.0 + uTime * 0.1, uTime * 0.25)) * 0.5 * uAmplitude;
   height = exp(height);
   height = (uv.y * 2.0 - height + 0.2);
   float intensity = 0.6 * height;
-  
+
   float midPoint = 0.20;
   float auroraAlpha = smoothstep(midPoint - uBlend * 0.5, midPoint + uBlend * 0.5, intensity);
-  
+
   vec3 auroraColor = intensity * rampColor;
-  
+
   fragColor = vec4(auroraColor * auroraAlpha, auroraAlpha);
 }
 `
 
-interface AuroraProps {
-  colorStops?: string[]
-  amplitude?: number
-  blend?: number
-  time?: number
-  speed?: number
-}
+  interface Props {
+    colorStops?: string[]
+    amplitude?: number
+    blend?: number
+    time?: number
+    speed?: number
+  }
 
-export default function Aurora(props: AuroraProps) {
-  const {
+  let {
     colorStops = ['#00d8ff', '#7cff67', '#00d8ff'],
     amplitude = 1.0,
     blend = 0.5,
-  } = props
-  const propsRef = useRef<AuroraProps>(props)
-  propsRef.current = props
+    time,
+    speed = 1.0,
+  }: Props = $props()
 
-  const ctnDom = useRef<HTMLDivElement>(null)
+  // Mutable proxy so the animation loop always reads the latest prop values
+  // without recreating the WebGL renderer on each prop change.
+  // untrack() reads the initial values without creating reactive bindings
+  // (the $effect below keeps this object in sync with props).
+  let propsProxy: Props = {
+    colorStops: untrack(() => colorStops),
+    amplitude: untrack(() => amplitude),
+    blend: untrack(() => blend),
+    time: untrack(() => time),
+    speed: untrack(() => speed),
+  }
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
-  useEffect(() => {
-    const ctn = ctnDom.current
-    if (!ctn) {
-      return
-    }
+  $effect(() => {
+    propsProxy.colorStops = colorStops
+    propsProxy.amplitude = amplitude
+    propsProxy.blend = blend
+    propsProxy.time = time
+    propsProxy.speed = speed
+  })
+
+  let ctnDom: HTMLDivElement
+
+  onMount(() => {
+    const ctn = ctnDom
+    if (!ctn) return
 
     const renderer = new Renderer({
       alpha: true,
@@ -151,13 +161,9 @@ export default function Aurora(props: AuroraProps) {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
     gl.canvas.style.backgroundColor = 'transparent'
 
-    // biome-ignore lint/style/useConst: <explanation>
     let program: Program | undefined
 
     function resize() {
-      if (!ctn) {
-        return
-      }
       const width = ctn.offsetWidth
       const height = ctn.offsetHeight
       renderer.setSize(width, height)
@@ -169,8 +175,7 @@ export default function Aurora(props: AuroraProps) {
 
     const geometry = new Triangle(gl)
     if (geometry.attributes.uv) {
-      // TypeScript may require a type assertion here.
-      ;(geometry.attributes as any).uv = undefined
+      ;(geometry.attributes as Record<string, unknown>).uv = undefined
     }
 
     const colorStopsArray = colorStops.map(hex => {
@@ -196,12 +201,13 @@ export default function Aurora(props: AuroraProps) {
     let animateId = 0
     const update = (t: number) => {
       animateId = requestAnimationFrame(update)
-      const { time = t * 0.01, speed = 1.0 } = propsRef.current
+      const pTime = propsProxy.time ?? t * 0.01
+      const pSpeed = propsProxy.speed ?? 1.0
       if (program) {
-        program.uniforms.uTime.value = time * speed * 0.1
-        program.uniforms.uAmplitude.value = propsRef.current.amplitude ?? 1.0
-        program.uniforms.uBlend.value = propsRef.current.blend ?? blend
-        const stops = propsRef.current.colorStops ?? colorStops
+        program.uniforms.uTime.value = pTime * pSpeed * 0.1
+        program.uniforms.uAmplitude.value = propsProxy.amplitude ?? 1.0
+        program.uniforms.uBlend.value = propsProxy.blend ?? blend
+        const stops = propsProxy.colorStops ?? colorStops
         program.uniforms.uColorStops.value = stops.map((hex: string) => {
           const c = new Color(hex)
           return [c.r, c.g, c.b]
@@ -221,7 +227,7 @@ export default function Aurora(props: AuroraProps) {
       }
       gl.getExtension('WEBGL_lose_context')?.loseContext()
     }
-  }, [amplitude])
+  })
+</script>
 
-  return <div ref={ctnDom} className="w-full h-full" />
-}
+<div bind:this={ctnDom} class="w-full h-full"></div>

@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
-    "ignore": ["node_modules/**", ".next/**", ".yarn/**"]
+    "ignore": ["node_modules/**", ".svelte-kit/**", ".yarn/**"]
   },
   "organizeImports": {
     "enabled": true
@@ -32,7 +32,6 @@
     "enabled": true,
     "rules": {
       "correctness": {
-        "useHookAtTopLevel": "error",
         "noConstAssign": "error",
         "noConstantCondition": "error",
         "noConstantMathMinMaxClamp": "error",
@@ -44,8 +43,7 @@
         "noUnreachable": "error",
         "noUnusedImports": "error",
         "noUnusedLabels": "error",
-        "noUnusedVariables": "error",
-        "useExhaustiveDependencies": "error"
+        "noUnusedVariables": "error"
       },
       "complexity": {
         "useArrowFunction": "error",
